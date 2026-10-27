@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Installer le navigateur automatique
@@ -76,17 +76,29 @@ jobs:
               if f is None:
                   print("::error::Application inaccessible"); sys.exit(1)
 
-              # Ouvrir le projet Ngaoundal
-              f.get_by_role("button", name="Ouvrir un projet").click()
-              page.wait_for_timeout(6000)
-              f = cadre_app(page)
-              cartes = f.locator("[class*='st-key-carte_projet_']")
-              for i in range(cartes.count()):
-                  if "Ngaoundal" in cartes.nth(i).inner_text():
-                      cartes.nth(i).get_by_role("button", name="Ouvrir").click()
-                      break
-              page.wait_for_timeout(6000)
-              controle(page, "02_projet_ngaoundal", ["Sols latéritiques de Ngaoundal"])
+              def etape(nom, action):
+                  """Exécute une étape ; en cas d'échec, note la raison au lieu de tout arrêter."""
+                  try:
+                      action()
+                      return True
+                  except Exception as e:
+                      problemes.append(f"{nom} : {type(e).__name__} : {str(e).splitlines()[0][:180]}")
+                      page.screenshot(path=f"captures/echec_{nom}.png", full_page=True)
+                      return False
+
+              def aller(lien):
+                  cadre_app(page).get_by_role("link", name=lien).first.click(timeout=30000)
+                  page.wait_for_timeout(8000)
+
+              # Ouvrir le projet Ngaoundal depuis la page Projets
+              def ouvrir_ngaoundal():
+                  aller("Projets")
+                  f = cadre_app(page)
+                  carte = f.locator("[class*='st-key-carte_projet_']").filter(has_text="Ngaoundal").first
+                  carte.get_by_role("button").first.click(timeout=30000)
+                  page.wait_for_timeout(8000)
+              if etape("02_ouverture_projet", ouvrir_ngaoundal):
+                  controle(page, "02_projet_ngaoundal", ["Sols latéritiques de Ngaoundal"])
 
               pages = [
                   ("Importer des données", "03_import", ["Jeux de données du projet"]),
@@ -98,17 +110,19 @@ jobs:
                   ("Historique", "09_historique", ["opération"]),
               ]
               for lien, nom, attendu in pages:
-                  f = cadre_app(page)
-                  f.get_by_role("link", name=lien).first.click()
-                  page.wait_for_timeout(8000)
+                  if not etape(nom, lambda: aller(lien)):
+                      continue
                   f = controle(page, nom, attendu)
                   if nom == "08_rapports" and f is not None:
-                      f.get_by_role("button", name="Générer le rapport PDF").click()
-                      for _ in range(18):
-                          page.wait_for_timeout(5000)
-                          if "Rapport prêt" in texte(cadre_app(page)):
-                              break
-                      controle(page, "08b_rapport_genere", ["Rapport prêt", "Télécharger le rapport PDF"])
+                      def generer():
+                          cadre_app(page).get_by_role("button", name="Générer le rapport PDF").click(timeout=30000)
+                          for _ in range(24):
+                              page.wait_for_timeout(5000)
+                              if "Rapport prêt" in texte(cadre_app(page)):
+                                  return
+                          raise TimeoutError("le rapport n'est pas prêt après 2 minutes")
+                      if etape("08b_generation_pdf", generer):
+                          controle(page, "08b_rapport_genere", ["Rapport prêt", "Télécharger le rapport PDF"])
               nav.close()
 
           for pb in problemes:
@@ -118,7 +132,7 @@ jobs:
           EOF
       - name: Garder les captures d'écran
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: captures-verification
           path: captures/
