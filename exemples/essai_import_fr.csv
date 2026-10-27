@@ -1,0 +1,7 @@
+Sondage;Échantillon;Profondeur (m);Teneur en eau;Résistance (kPa);Nature du sol
+SC1;ECH-01;1,0;25 %;85;Argile
+SC1;ECH-02;2,5;0,28;92;Argile
+SC1;ECH-03;4,0;22;;Argile sableuse
+SC2;ECH-04;1,5;19 %;110;Sable
+SC2;ECH-05;3,0;;120;Sable
+SC2;ECH-06;5,0;300 %;135;Sable graveleux

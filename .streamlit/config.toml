@@ -1,0 +1,21 @@
+# Thème visuel de GeoData Sol : fond violet clair, texte noir, cases blanches
+# (le fond blanc des cadres, formulaires et chiffres clés est réglé dans geodata/ui.py,
+#  fonction appliquer_style, car Streamlit n'a pas d'option pour cela)
+[theme]
+base = "light"
+# Rose franc : boutons principaux, cases cochées, élément de menu sélectionné
+primaryColor = "#C2185B"
+# Violet clair : fond des pages
+backgroundColor = "#E8DFF5"
+# Blanc : champs de saisie, listes déroulantes, cases
+secondaryBackgroundColor = "#FFFFFF"
+# Noir : texte
+textColor = "#111111"
+# Couleur des liens et des bordures (violet moyen, pour bien détacher les cases blanches)
+linkColor = "#C2185B"
+borderColor = "#B9A5DB"
+
+[theme.sidebar]
+# Menu de gauche : violet un peu plus soutenu que le fond des pages
+backgroundColor = "#D9CCEE"
+secondaryBackgroundColor = "#FFFFFF"
