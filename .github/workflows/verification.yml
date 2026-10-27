@@ -35,9 +35,10 @@ jobs:
           problemes = []
 
           def cadre_app(page):
-              for f in page.frames:
+              """Cadre qui affiche réellement l'application (texte visible, cadres intérieurs d'abord)."""
+              for f in reversed(page.frames):
                   try:
-                      if "GeoData Sol" in f.content():
+                      if "GeoData Sol" in f.locator("body").inner_text(timeout=5000):
                           return f
                   except Exception:
                       pass
