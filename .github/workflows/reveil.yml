@@ -1,0 +1,64 @@
+# Robot de réveil : visite l'application en ligne toutes les 4 heures pour qu'elle ne se mette
+# pas en veille (Streamlit Community Cloud endort les applications après 12 h sans visite).
+# Si elle dort malgré tout, il clique sur le bouton de réveil. Il vérifie ensuite que la page
+# affiche bien « GeoData Sol » : sinon l'exécution est marquée en échec (visible sur GitHub).
+name: Réveil de l'application
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  reveil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer le navigateur automatique
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+      - name: Visiter l'application
+        env:
+          URL_APPLICATION: "https://geodata-sol-guylene.streamlit.app/"
+        run: |
+          python - <<'EOF'
+          import os, sys
+          from playwright.sync_api import sync_playwright
+
+          url = os.environ["URL_APPLICATION"]
+
+          def contient(page, texte):
+              return any(texte in (cadre.content() or "") for cadre in page.frames)
+
+          with sync_playwright() as p:
+              navigateur = p.chromium.launch()
+              page = navigateur.new_page()
+              page.goto(url, timeout=120000)
+              page.wait_for_timeout(20000)
+              bouton = page.get_by_role("button", name="get this app back up", exact=False)
+              if bouton.count():
+                  print("Application en veille : réveil en cours")
+                  bouton.first.click()
+              for _ in range(30):  # jusqu'à 5 minutes pour le démarrage
+                  if contient(page, "GeoData Sol"):
+                      break
+                  page.wait_for_timeout(10000)
+              ok = contient(page, "GeoData Sol")
+              page.screenshot(path="capture.png", full_page=True)
+              navigateur.close()
+          print("Application affichée correctement" if ok else "ÉCHEC : « GeoData Sol » introuvable sur la page")
+          sys.exit(0 if ok else 1)
+          EOF
+      - name: Garder une capture d'écran
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-application
+          path: capture.png
+          retention-days: 7
