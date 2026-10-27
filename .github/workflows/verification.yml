@@ -45,7 +45,8 @@ jobs:
               return None
 
           def texte(f):
-              return f.locator("body").inner_text()
+              """Texte visible + contenu des listes déroulantes (valeur choisie, ex. statut « validé »)."""
+              return f.locator("body").inner_text() + " " + f.content()
 
           def controle(page, nom, attendu):
               f = cadre_app(page)
