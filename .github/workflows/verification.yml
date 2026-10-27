@@ -1,0 +1,125 @@
+# Vérification complète de l'application en ligne, comme le ferait un visiteur :
+# ouverture du projet Ngaoundal, visite de chaque page, génération d'un rapport PDF.
+# Lancée à chaque publication. Résultats visibles dans l'onglet « Actions » du dépôt GitHub
+# (messages « notice » / « error ») et captures d'écran conservées 7 jours.
+name: Vérification de l'application en ligne
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer le navigateur automatique
+        run: |
+          pip install playwright==1.47.0
+          python -m playwright install --with-deps chromium
+      - name: Parcourir l'application
+        env:
+          URL_APPLICATION: "https://geodata-sol-guylene.streamlit.app/"
+        run: |
+          mkdir -p captures
+          python - <<'EOF'
+          import os, re, sys
+          from playwright.sync_api import sync_playwright
+
+          URL = os.environ["URL_APPLICATION"]
+          ERREURS = re.compile(r"Traceback|StreamlitAPIException|KeyError|TypeError|ValueError:|AttributeError|NameError")
+          problemes = []
+
+          def cadre_app(page):
+              for f in page.frames:
+                  try:
+                      if "GeoData Sol" in f.content():
+                          return f
+                  except Exception:
+                      pass
+              return None
+
+          def texte(f):
+              return f.locator("body").inner_text()
+
+          def controle(page, nom, attendu):
+              f = cadre_app(page)
+              page.screenshot(path=f"captures/{nom}.png", full_page=True)
+              if f is None:
+                  problemes.append(f"{nom} : application introuvable"); return None
+              t = texte(f)
+              if ERREURS.search(t):
+                  problemes.append(f"{nom} : message d'erreur affiché")
+              for mot in attendu:
+                  if mot not in t:
+                      problemes.append(f"{nom} : « {mot} » absent")
+              print(f"::notice::{nom} : vérifiée")
+              return f
+
+          with sync_playwright() as p:
+              nav = p.chromium.launch()
+              page = nav.new_page(viewport={"width": 1400, "height": 1000})
+              page.goto(URL, timeout=180000)
+              for _ in range(30):
+                  if cadre_app(page):
+                      break
+                  bouton = page.get_by_role("button", name="get this app back up", exact=False)
+                  if bouton.count():
+                      bouton.first.click()
+                  page.wait_for_timeout(10000)
+              page.wait_for_timeout(5000)
+              f = controle(page, "01_accueil", ["GeoData Sol", "ESSOLA AVA GUYLENE", "Essayer"])
+              if f is None:
+                  print("::error::Application inaccessible"); sys.exit(1)
+
+              # Ouvrir le projet Ngaoundal
+              f.get_by_role("button", name="Ouvrir un projet").click()
+              page.wait_for_timeout(6000)
+              f = cadre_app(page)
+              cartes = f.locator("[class*='st-key-carte_projet_']")
+              for i in range(cartes.count()):
+                  if "Ngaoundal" in cartes.nth(i).inner_text():
+                      cartes.nth(i).get_by_role("button", name="Ouvrir").click()
+                      break
+              page.wait_for_timeout(6000)
+              controle(page, "02_projet_ngaoundal", ["Sols latéritiques de Ngaoundal"])
+
+              pages = [
+                  ("Importer des données", "03_import", ["Jeux de données du projet"]),
+                  ("Collecte en ligne", "04_collecte", ["Ngaoundal", "Sources de données"]),
+                  ("Contrôle qualité", "05_controle_qualite", ["validé"]),
+                  ("Sondages et échantillons", "06_sondages", ["Échantillons"]),
+                  ("Analyses", "07_analyses", ["Observations", "Résultats calculés", "Estimations statistiques"]),
+                  ("Rapports et exports", "08_rapports", ["Rapport PDF"]),
+                  ("Historique", "09_historique", ["opération"]),
+              ]
+              for lien, nom, attendu in pages:
+                  f = cadre_app(page)
+                  f.get_by_role("link", name=lien).first.click()
+                  page.wait_for_timeout(8000)
+                  f = controle(page, nom, attendu)
+                  if nom == "08_rapports" and f is not None:
+                      f.get_by_role("button", name="Générer le rapport PDF").click()
+                      for _ in range(18):
+                          page.wait_for_timeout(5000)
+                          if "Rapport prêt" in texte(cadre_app(page)):
+                              break
+                      controle(page, "08b_rapport_genere", ["Rapport prêt", "Télécharger le rapport PDF"])
+              nav.close()
+
+          for pb in problemes:
+              print(f"::error::{pb}")
+          print("BILAN :", "aucun problème" if not problemes else f"{len(problemes)} problème(s)")
+          sys.exit(1 if problemes else 0)
+          EOF
+      - name: Garder les captures d'écran
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-verification
+          path: captures/
+          retention-days: 7
